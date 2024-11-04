@@ -170,6 +170,25 @@ public class Cliente implements Runnable {
                 out.writeObject(hmacPaquete);
                 System.out.println("(Cliente " + uid + "): " + "HMAC Paquete enviado: " + Arrays.toString(hmacPaquete));
                 out.flush();
+
+                // Recibir y verificar la respuesta
+                byte[] idEstado = (byte[]) in.readObject();
+                System.out.println("(Cliente " + uid + "): " + "Respuesta recibida: " + Arrays.toString(idEstado));
+                byte[] hmacEstado = (byte[]) in.readObject();
+                System.out.println("(Cliente " + uid + "): " + "HMAC recibido: " + Arrays.toString(hmacEstado));
+
+                cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
+                byte[] idEstadoDescifrado = cipher.doFinal(idCifrado);
+                String idEstadoDescifradoString = new String(idEstadoDescifrado, StandardCharsets.UTF_8);
+
+                mac.init(hmacKey);
+                byte[] hmacCalculado = mac.doFinal(idEstadoDescifrado);
+                if (!Arrays.equals(hmac, hmacCalculado)) {
+                    throw new SecurityException("La HMAC del ID del paquete no es válida.");
+                }
+
+                System.out.println("(Cliente " + uid + "): " + "ID Estado descifrado: " + idEstadoDescifradoString);
+                out.writeObject("TERMINAR");
                 numConsultas--;
         }
 

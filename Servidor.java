@@ -11,6 +11,7 @@ import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 public class Servidor {
     private static final int PUERTO = 12345;
@@ -20,9 +21,20 @@ public class Servidor {
     
     private static PublicKey K_w_plus;
     private static PrivateKey K_w_minus;
+    private static ArrayList<Paquete> tablaPaquetes;
 
     public static void main(String[] args) {
         try {
+            tablaPaquetes = new ArrayList<Paquete>();
+            for (int i = 1; i <= 32; i++) {
+                int estado = (int) (Math.random() * 7) + 1;
+                tablaPaquetes.add(new Paquete(i, i, estado));
+            }
+
+            for (Paquete paquete : tablaPaquetes) {
+                System.out.println(paquete);
+            }
+
             cargarLlaves();
             ServerSocket serverSocket = new ServerSocket(PUERTO);
             System.out.println("Servidor escuchando en el puerto " + PUERTO);
@@ -33,7 +45,7 @@ public class Servidor {
                 System.out.println("Cliente conectado a nuevo hilo.");
                 
                 // Crear un nuevo hilo para manejar al cliente
-                Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus, currentid));
+                Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus, currentid, tablaPaquetes));
                 clientThread.start();
             }
         } catch (Exception e) {

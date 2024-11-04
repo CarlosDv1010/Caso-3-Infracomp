@@ -10,7 +10,7 @@ import java.util.Arrays;
 import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
-
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.Cipher;
 class ClientHandler implements Runnable {
@@ -19,11 +19,13 @@ class ClientHandler implements Runnable {
     private ObjectOutputStream out;
     private static PrivateKey K_w_minus;
     private int sid;
+    private static ArrayList<Paquete> tablaPaquetes;
 
-    public ClientHandler(Socket socket, PrivateKey K_w_minus, int sid) {
+    public ClientHandler(Socket socket, PrivateKey K_w_minusR, int sid, ArrayList<Paquete> tablaPaquetesR) {
+        tablaPaquetes = tablaPaquetesR;
         this.sid = sid;
         this.socket = socket;
-        this.K_w_minus = K_w_minus;
+        K_w_minus = K_w_minusR;
         try {
             this.in = new ObjectInputStream(socket.getInputStream());
             this.out = new ObjectOutputStream(socket.getOutputStream());
@@ -148,6 +150,40 @@ class ClientHandler implements Runnable {
                 System.out.println("(Hilo servidor " + sid + "): " + "ID recibido: " + id);
                 System.out.println("(Hilo servidor " + sid + "): " + "ID Paquete recibido: " + idPaquete);
 
+                System.out.println("(Hilo servidor " + sid + "): " + "Verificando estado del paquete...");
+                int idUsuario = Integer.parseInt(id);
+                int idPaqueteInt = Integer.parseInt(idPaquete);
+                int estadoPaquete = obtenerEstadoPaquete(tablaPaquetes, idUsuario, idPaqueteInt);
+
+                Cipher cipher2 = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher2.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
+
+                String idEstado = String.format("%d", estadoPaquete);
+                byte[] idBytes = idEstado.getBytes(StandardCharsets.UTF_8);
+
+                byte[] idCifradoEstado = cipher2.doFinal(idBytes);
+
+                mac.init(hmacKey);
+
+                byte[] hmacEstado = mac.doFinal(idBytes);
+
+                out.writeObject(idCifradoEstado);
+                System.out.println("(Hilo servidor " + sid + "): " + "ID cifrado de estado enviado: " + Arrays.toString(idCifradoEstado));
+                out.writeObject(hmacEstado);
+                System.out.println("(Hilo servidor " + sid + "): " + "HMAC de estado enviado: " + Arrays.toString(hmacEstado));
+                out.flush();
+
+                // Recibir y verificar la respuesta
+                String res = (String) in.readObject();
+                if (!"TERMINAR".equals(res)) {
+                    throw new IllegalArgumentException("El cliente no envió el mensaje TERMINAR.");
+                }
+                else {
+                    System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió TERMINAR");
+                    socket.close();
+                }
+
+
             } else {
                 System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
             }
@@ -188,5 +224,14 @@ class ClientHandler implements Runnable {
             e.printStackTrace();
             return null;
         }
+    }
+
+    public static int obtenerEstadoPaquete(ArrayList<Paquete> tabla, int idUsuario, int idPaquete) {
+        for (Paquete paquete : tabla) {
+            if (paquete.loginUsuario == idUsuario && paquete.idPaquete == idPaquete) {
+                return paquete.estado;
+            }
+        }
+        return -1;
     }
 }
