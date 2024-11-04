@@ -1,8 +1,4 @@
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.math.BigInteger;
 import java.net.ServerSocket;
@@ -10,15 +6,14 @@ import java.net.Socket;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Scanner;
 
 public class Servidor {
     private static final int PUERTO = 12345;
-    private static final String ALGORITMO_CIFRADO = "AES/CBC/PKCS5Padding";
-    private static final String ALGORITMO_FIRMA = "SHA1withRSA";
+    private static final int RSA_KEY_SIZE = 1024; // Tamaño de la llave RSA
     private static int currentid = 0;
-    
+
     private static PublicKey K_w_plus;
     private static PrivateKey K_w_minus;
     private static ArrayList<Paquete> tablaPaquetes;
@@ -35,25 +30,54 @@ public class Servidor {
                 System.out.println(paquete);
             }
 
-            cargarLlaves();
-            ServerSocket serverSocket = new ServerSocket(PUERTO);
-            System.out.println("Servidor escuchando en el puerto " + PUERTO);
-            cargarLlaves();
+            Scanner scanner = new Scanner(System.in);
             while (true) {
-                currentid++;
-                Socket socket = serverSocket.accept();
-                System.out.println("Cliente conectado a nuevo hilo.");
-                
-                // Crear un nuevo hilo para manejar al cliente
-                Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus, currentid, tablaPaquetes));
-                clientThread.start();
+                System.out.println("Seleccione una opción:");
+                System.out.println("1. Generar llaves");
+                System.out.println("2. Iniciar servidor");
+                System.out.println("3. Salir");
+                int opcion = scanner.nextInt();
+                scanner.nextLine(); // Limpiar el buffer
+
+                if (opcion == 1) {
+                    generarLlaves();
+                } else if (opcion == 2) {
+                    cargarLlaves();
+                    iniciarServidor();
+                } else if (opcion==3) {
+                    System.out.println("Saliendo...");
+                    break;
+                }
+                else {
+                    System.out.println("Opción no válida.");
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    
+    private static void generarLlaves() throws Exception {
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+        keyPairGenerator.initialize(RSA_KEY_SIZE);
+        KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+        K_w_plus = keyPair.getPublic();
+        K_w_minus = keyPair.getPrivate();
+
+        // Guardar la llave pública
+        try (FileOutputStream fos = new FileOutputStream("Clientes/public.key")) {
+            fos.write(K_w_plus.getEncoded());
+        }
+
+        // Guardar la llave privada
+        try (FileOutputStream fos = new FileOutputStream("private.key")) {
+            fos.write(K_w_minus.getEncoded());
+        }
+
+        System.out.println("Llaves generadas y guardadas.");
+    }
+
     private static void cargarLlaves() throws Exception {
         // Cargar las llaves pública y privada desde los archivos
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
@@ -67,4 +91,17 @@ public class Servidor {
         }
     }
 
+    private static void iniciarServidor() throws IOException {
+        ServerSocket serverSocket = new ServerSocket(PUERTO);
+        System.out.println("Servidor escuchando en el puerto " + PUERTO);
+        while (true) {
+            currentid++;
+            Socket socket = serverSocket.accept();
+            System.out.println("Cliente conectado a nuevo hilo.");
+            
+            // Crear un nuevo hilo para manejar al cliente
+            Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus, currentid, tablaPaquetes));
+            clientThread.start();
+        }
+    }
 }
