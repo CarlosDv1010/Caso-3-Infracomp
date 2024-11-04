@@ -1,17 +1,18 @@
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.math.BigInteger;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.security.*;
+import javax.crypto.*;
+import javax.crypto.spec.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
 
+import java.nio.charset.StandardCharsets;
+import javax.crypto.Cipher;
 class ClientHandler implements Runnable {
     private Socket socket;
     private ObjectInputStream in;
@@ -111,6 +112,42 @@ class ClientHandler implements Runnable {
                 secureRandom.nextBytes(iv);
                 out.writeObject(iv);
                 out.flush();
+
+                byte[] idCifrado = (byte[]) in.readObject();
+                byte[] hmac = (byte[]) in.readObject();
+                byte[] idPaqueteCifrado = (byte[]) in.readObject();
+                byte[] hmacPaquete = (byte[]) in.readObject();
+
+                IvParameterSpec ivSpec = new IvParameterSpec(iv);
+                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
+
+                // Descifrar el ID
+                byte[] idDescifrado = cipher.doFinal(idCifrado);
+                String id = new String(idDescifrado, StandardCharsets.UTF_8);
+
+                // Descifrar el Paquete ID
+                byte[] idPaqueteDescifrado = cipher.doFinal(idPaqueteCifrado);
+                String idPaquete = new String(idPaqueteDescifrado, StandardCharsets.UTF_8);
+
+                Mac mac = Mac.getInstance("HmacSHA384");
+                mac.init(hmacKey);
+
+                // Generar HMAC para el ID descifrado
+                byte[] hmacCalculado = mac.doFinal(idDescifrado);
+                if (!Arrays.equals(hmac, hmacCalculado)) {
+                    throw new SecurityException("La HMAC del ID no es válida.");
+                }
+
+                // Generar HMAC para el ID de Paquete descifrado
+                byte[] hmacPaqueteCalculado = mac.doFinal(idPaqueteDescifrado);
+                if (!Arrays.equals(hmacPaquete, hmacPaqueteCalculado)) {
+                    throw new SecurityException("La HMAC del ID de Paquete no es válida.");
+                }
+
+                System.out.println("(Hilo servidor " + sid + "): " + "ID recibido: " + id);
+                System.out.println("(Hilo servidor " + sid + "): " + "ID Paquete recibido: " + idPaquete);
+
             } else {
                 System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
             }
