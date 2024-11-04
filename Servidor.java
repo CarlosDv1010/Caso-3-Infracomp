@@ -2,105 +2,72 @@ import java.io.*;
 import java.net.*;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
+
 import javax.crypto.Cipher;
 
 public class Servidor {
-    private static PrivateKey privateKey;
-
     public static void main(String[] args) {
-        try {
-            // Cargar la llave privada del servidor
-            privateKey = cargarLlavePrivada("private.key");
-
-            // Iniciar el servidor en el puerto 12345
-            ServerSocket serverSocket = new ServerSocket(12345);
+        try (ServerSocket serverSocket = new ServerSocket(12345)) {
             System.out.println("Servidor iniciado en el puerto 12345");
 
             while (true) {
-                Socket clientSocket = serverSocket.accept();  
-                System.out.println("Cliente conectado");
-                new Thread(new ClienteHandler(clientSocket)).start(); 
-            }
-        } catch (IOException | GeneralSecurityException e) {
-            System.err.println("Error en el servidor: " + e.getMessage());
-        }
-    }
+                try (Socket socket = serverSocket.accept();
+                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                     ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
 
-    private static class ClienteHandler implements Runnable {
-        private Socket clientSocket;
+                    System.out.println("Cliente conectado");
+                    String mensajeInicial = in.readUTF();
+                    System.out.println("Recibido mensaje inicial " + mensajeInicial);
 
-        public ClienteHandler(Socket clientSocket) {
-            this.clientSocket = clientSocket;
-        }
+                    if ("SECINIT".equals(mensajeInicial)) {
+                        // Esperar reto cifrado del cliente
+                        byte[] retoCifrado = (byte[]) in.readObject();
+                        System.out.println("Reto cifrado recibido.");
 
-        @Override
-        public void run() {
-            try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream());
-                 ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream())) {
+                        // Aquí debes descifrar el reto y hacer cualquier operación necesaria
+                        String retoDescifrado = descifrarConRSA(retoCifrado, "private.key");
+                        System.out.println("Reto descifrado: " + retoDescifrado);
 
-                // Leer el mensaje inicial del cliente
-                String secInit = in.readUTF();
-                if ("SECINIT".equals(secInit)) {
-                    System.out.println("Recibido mensaje inicial SECINIT");
-                    // Leer el reto cifrado del cliente
-                    byte[] retoCifrado = (byte[]) in.readObject();
-                    System.out.println("Reto cifrado recibido.");
-
-                    String reto = descifrarConRSA(retoCifrado, privateKey);
-                    System.out.println("Reto descifrado: " + reto);
-
-                    // Firmar la respuesta usando la llave privada
-                    byte[] respuestaFirmada;
-                    try {
-                        respuestaFirmada = firmarDatos(reto, privateKey);
+                        // Respuesta firmada
+                        byte[] respuestaFirmada = firmarDatos(retoDescifrado, "private.key");
                         out.writeObject(respuestaFirmada);
                         out.flush();
                         System.out.println("Respuesta firmada enviada al cliente.");
-                    } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException e) {
-                        System.err.println("Error al firmar los datos: " + e.getMessage());
-                        return; // Finaliza el manejo de esta conexión
+
+                        // Recibir la respuesta del cliente
+                        String respuestaCliente = in.readUTF();
+                        System.out.println("Respuesta del cliente: " + respuestaCliente);
+
+                        // Aquí podrías continuar con el flujo
+                        // Por ejemplo, enviar valores G, P, G^x al cliente
+                        String valores = "Valores G, P, G^x"; // Reemplaza esto con los valores reales
+                        out.writeUTF(valores);
+                        out.flush();
                     }
 
-                    // Esperar respuesta del cliente
-                    String respuestaCliente = in.readUTF();
-                    System.out.println("Respuesta del cliente: " + respuestaCliente);
-                    if ("OK".equals(respuestaCliente)) {
-                        // Generar G, P, G^x
-                        int G = 5; 
-                        int P = 23; 
-                        int x = 6; 
-                        int Gx = (int) Math.pow(G, x) % P;
-
-                        // Enviar G, P, G^x al cliente
-                        out.writeInt(G);
-                        out.writeInt(P);
-                        out.writeInt(Gx);
-                        out.flush();
-                        System.out.println("Valores G, P, G^x enviados.");
-
-                        // Leer respuesta del cliente
-                        byte[] response = (byte[]) in.readObject();
-                        System.out.println("Respuesta del cliente verificada: " + new String(response));
-
-                        // Generar y enviar IV al cliente
-                        byte[] iv = generarIV();
-                        out.writeObject(iv);
-                        out.flush();
-                        System.out.println("IV enviado al cliente.");
-
-                        // Esperar datos cifrados y HMAC del cliente
-                        byte[] datosCifrados = (byte[]) in.readObject();
-                        byte[] hmac = (byte[]) in.readObject();
-
-                        // Aquí puedes validar los datos cifrados y el HMAC
-                        System.out.println("Datos cifrados recibidos y HMAC validado.");
-                    }
+                } catch (IOException | ClassNotFoundException | GeneralSecurityException e) {
+                    System.err.println("Error en el manejador del cliente: " + e.getMessage());
                 }
-                clientSocket.close();
-            } catch (IOException | ClassNotFoundException | GeneralSecurityException e) {
-                System.err.println("Error en el manejador del cliente: " + e.getMessage());
             }
+        } catch (IOException e) {
+            System.err.println("Error al iniciar el servidor: " + e.getMessage());
         }
+    }
+
+    private static String descifrarConRSA(byte[] datosCifrados, String archivoLlavePrivada) throws GeneralSecurityException, IOException {
+        PrivateKey privateKey = cargarLlavePrivada(archivoLlavePrivada);
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privateKey);
+        byte[] datosDescifrados = cipher.doFinal(datosCifrados);
+        return new String(datosDescifrados);
+    }
+
+    private static byte[] firmarDatos(String datos, String archivoLlavePrivada) throws GeneralSecurityException, IOException {
+        PrivateKey privateKey = cargarLlavePrivada(archivoLlavePrivada);
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        signature.initSign(privateKey);
+        signature.update(datos.getBytes());
+        return signature.sign();
     }
 
     private static PrivateKey cargarLlavePrivada(String archivoLlave) throws IOException, GeneralSecurityException {
@@ -112,24 +79,5 @@ public class Servidor {
         PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(bytesLlave);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
         return keyFactory.generatePrivate(spec);
-    }
-
-    private static String descifrarConRSA(byte[] datosCifrados, PrivateKey llavePrivada) throws GeneralSecurityException {
-        Cipher cipher = Cipher.getInstance("RSA");
-        cipher.init(Cipher.DECRYPT_MODE, llavePrivada);
-        return new String(cipher.doFinal(datosCifrados));
-    }
-
-    private static byte[] firmarDatos(String datos, PrivateKey llavePrivada) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
-        Signature signature = Signature.getInstance("SHA256withRSA");
-        signature.initSign(llavePrivada);
-        signature.update(datos.getBytes());
-        return signature.sign();
-    }
-
-    private static byte[] generarIV() {
-        byte[] iv = new byte[16]; 
-        new SecureRandom().nextBytes(iv);
-        return iv;
     }
 }
