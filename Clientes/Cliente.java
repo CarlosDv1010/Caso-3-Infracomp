@@ -71,7 +71,7 @@ public class Cliente implements Runnable {
                 // Aquí comienza la lógica del cliente
                 out.writeObject("SECINIT Cliente " + uid);
                 out.flush();
-                System.out.println("(Cliente " + uid + "): " + "Mensaje inicial enviado.");
+                System.out.println(uid + " SECINIT");
 
                 // Generar y enviar el reto cifrado
                 byte[] reto = new byte[16];
@@ -84,30 +84,26 @@ public class Cliente implements Runnable {
 
                 out.writeObject(R);
                 out.flush();
-                System.out.println("(Cliente " + uid + "): " + "Reto cifrado enviado.");
 
                 // Verificar la respuesta
                 byte[] RtaRecibido = new byte[reto.length];
                 in.read(RtaRecibido);
-                System.out.println("(Cliente " + uid + "): " + "Rta recibida del servidor: " + Arrays.toString(RtaRecibido));
+                
 
                 if (MessageDigest.isEqual(RtaRecibido, reto)) {
-                    System.out.println("(Cliente " + uid + "): " + "Rta verificada correctamente.");
+                    System.out.println(uid + " Reto cifrado es OK");
                     out.writeObject("OK");
                     out.flush();
                 } else {
-                    System.out.println("(Cliente " + uid + "): " + "Rta no válida.");
+                    System.out.println(uid + " Reto cifrado es ERROR");
                     out.writeObject("ERROR");
                     out.flush();
                 }
 
                 // Recibir y verificar los valores G, P y Gx
                 G = (BigInteger) in.readObject();
-                System.out.println("(Cliente " + uid + "): " + "G recibido: " + G);
                 P = (BigInteger) in.readObject();
-                System.out.println("(Cliente " + uid + "): " + "P recibido: " + P);
                 Gx = (BigInteger) in.readObject();
-                System.out.println("(Cliente " + uid + "): " + "G^x recibido: " + Gx);
                 byte[] firma = (byte[]) in.readObject();
                 random = new SecureRandom();
                 BigInteger y;
@@ -115,21 +111,18 @@ public class Cliente implements Runnable {
                     y = new BigInteger(P.bitLength(), random);
                 } while (y.compareTo(P) >= 0 || y.compareTo(BigInteger.ONE) < 0);
 
-                
-                System.out.println("(Cliente " + uid + "): " + "Firma recibida: " + Arrays.toString(firma));
                 boolean firmaValida = verificarFirma(G, P, Gx, firma);
                 if (firmaValida) {
-                    System.out.println("(Cliente " + uid + "): " + "Firma válida. Continuando...");
+                    System.out.println(uid+" Firma es OK");
                     out.writeObject("OK");
                 } else {
-                    System.out.println("(Cliente " + uid + "): " + "Firma inválida.");
-                    out.writeObject("NO");
-                    throw new Exception("Firma inválida.");
+                    System.out.println(uid + " Firma es ERROR");
+                    out.writeObject("ERROR");
+                    throw new Exception(" Firma inválida.");
                 }
 
                 BigInteger Gy = G.modPow(y, P);
                 out.writeObject(Gy);
-                System.out.println("(Cliente " + uid + "): " + "G^y enviado: " + Gy);
                 out.flush();
 
                 BigInteger Gxy = Gx.modPow(y, P);
@@ -177,20 +170,14 @@ public class Cliente implements Runnable {
 
 
                 out.writeObject(idCifrado);
-                System.out.println("(Cliente " + uid + "): " + "ID cifrado enviado: " + Arrays.toString(idCifrado));
                 out.writeObject(hmac);
-                System.out.println("(Cliente " + uid + "): " + "HMAC enviado: " + Arrays.toString(hmac));
                 out.writeObject(idPaqueteCifrado);
-                System.out.println("(Cliente " + uid + "): " + "ID Paquete cifrado enviado: " + Arrays.toString(idPaqueteCifrado));
                 out.writeObject(hmacPaquete);
-                System.out.println("(Cliente " + uid + "): " + "HMAC Paquete enviado: " + Arrays.toString(hmacPaquete));
                 out.flush();
 
                 // Recibir y verificar la respuesta
                 byte[] idEstado = (byte[]) in.readObject();
-                System.out.println("(Cliente " + uid + "): " + "Respuesta recibida: " + Arrays.toString(idEstado));
                 byte[] hmacEstado = (byte[]) in.readObject();
-                System.out.println("(Cliente " + uid + "): " + "HMAC recibido: " + Arrays.toString(hmacEstado));
 
                 Cipher cipher4 = Cipher.getInstance("AES/CBC/PKCS5Padding");
                 cipher4.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);

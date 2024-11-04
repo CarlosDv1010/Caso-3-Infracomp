@@ -43,16 +43,12 @@ class ClientHandler implements Runnable {
             while (numConsultas > 0){
 
                 String mensajeInicial = (String) in.readObject();
-                System.out.println("(Hilo servidor " + sid + "): " + "Mensaje inicial recibido: " + mensajeInicial);
-
                 // 2. Leer reto cifrado
                 byte[] retoCifrado = (byte[]) in.readObject();
                 // 3. Desencriptar reto
                 byte[] Rta = descifrarReto(retoCifrado);
-                System.out.println("(Hilo servidor " + sid + "): " + "Rta calculada: " + Arrays.toString(Rta));
 
                 // 4. Enviar respuesta al cliente
-                System.out.println("(Hilo servidor " + sid + "): " + "Enviando respuesta al cliente: " + Arrays.toString(Rta));
                 out.write(Rta);
                 out.flush();
 
@@ -76,13 +72,9 @@ class ClientHandler implements Runnable {
                     BigInteger Gx = G.modPow(x, P);
 
                     out.writeObject(G);
-                    System.out.println("(Hilo servidor " + sid + "): " + "G enviado: " + G);
                     out.writeObject(P);
-                    System.out.println("(Hilo servidor " + sid + "): " + "P enviado: " + P);
                     out.writeObject(Gx);
-                    System.out.println("(Hilo servidor " + sid + "): " + "G^x enviado: " + Gx);
                     byte[] firma = firmarTupla(G, P, Gx);
-                    System.out.println("(Hilo servidor " + sid + "): " + "Firma generada: " + Arrays.toString(firma));
                     out.writeObject(firma);
                     out.flush();
 
@@ -92,7 +84,7 @@ class ClientHandler implements Runnable {
                         System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
                         throw new IllegalArgumentException("El cliente respondió con ERROR.");
                     }
-                    System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió OK");
+                    System.out.println("(Hilo servidor " + sid + "): " + " Cliente respondió OK");
 
                     BigInteger Gy = (BigInteger) in.readObject();
                     BigInteger Gyx = Gy.modPow(x, P);
@@ -151,9 +143,6 @@ class ClientHandler implements Runnable {
                         throw new SecurityException("La HMAC del ID de Paquete no es válida.");
                     }
 
-                    System.out.println("(Hilo servidor " + sid + "): " + "ID recibido: " + id);
-                    System.out.println("(Hilo servidor " + sid + "): " + "ID Paquete recibido: " + idPaquete);
-
                     System.out.println("(Hilo servidor " + sid + "): " + "Verificando estado del paquete...");
                     int idUsuario = Integer.parseInt(id);
                     int idPaqueteInt = Integer.parseInt(idPaquete);
@@ -174,9 +163,7 @@ class ClientHandler implements Runnable {
                     byte[] hmacEstado = mac.doFinal(idBytes);
 
                     out.writeObject(idCifradoEstado);
-                    System.out.println("(Hilo servidor " + sid + "): " + "ID cifrado de estado enviado: " + Arrays.toString(idCifradoEstado));
                     out.writeObject(hmacEstado);
-                    System.out.println("(Hilo servidor " + sid + "): " + "HMAC de estado enviado: " + Arrays.toString(hmacEstado));
                     out.flush();
 
                     // Recibir y verificar la respuesta

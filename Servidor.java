@@ -26,10 +26,6 @@ public class Servidor {
                 tablaPaquetes.add(new Paquete(i, i, estado));
             }
 
-            for (Paquete paquete : tablaPaquetes) {
-                System.out.println(paquete);
-            }
-
             Scanner scanner = new Scanner(System.in);
             while (true) {
                 System.out.println("Seleccione una opción:");
