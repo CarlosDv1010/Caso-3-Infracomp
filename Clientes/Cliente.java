@@ -12,7 +12,10 @@ import java.util.Arrays;
 import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
-
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.util.HashMap;
+import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.Cipher;
 
@@ -24,6 +27,7 @@ public class Cliente implements Runnable {
     private int uid;
     private int paqueteIdInicial;
     private int numConsultas;
+    private static Map<Integer, String> estadosMap = new HashMap<>();
 
     public Cliente(int uid, int paqueteIdInicial, int numConsultas) {
         this.uid = uid;
@@ -32,13 +36,22 @@ public class Cliente implements Runnable {
     }
 
     public static void main(String[] args) throws Exception {
+
+        estadosMap.put(-1, "NOEXISTE/INVALIDO");
+        estadosMap.put(1, "ENOFICINA");
+        estadosMap.put(2, "RECOGIDO");
+        estadosMap.put(3, "ENCLASIFICACION");
+        estadosMap.put(4, "DESPACHADO");
+        estadosMap.put(5, "ENENTREGA");
+        estadosMap.put(6, "ENTREGADO");
+        estadosMap.put(7, "DESCONOCIDO");
         // Cargar las llaves antes de iniciar los clientes
         cargarLlaves();
 
         // Crear múltiples hilos de cliente
-        int numeroClientes = 1; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
         for (int i = 1; i <= numeroClientes; i++) {
-            new Thread(new Cliente(i, i, 1)).start();
+            new Thread(new Cliente(i, i, 10)).start();
         }
     }
 
@@ -51,6 +64,8 @@ public class Cliente implements Runnable {
         try (Socket socket = new Socket("localhost", 12345);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+            out.writeObject(numConsultas);
+            out.flush();
             while (numConsultas > 0){
                 int currentPaqueteId = paqueteIdInicial + numConsultas - 1;
                 // Aquí comienza la lógica del cliente
@@ -177,20 +192,22 @@ public class Cliente implements Runnable {
                 byte[] hmacEstado = (byte[]) in.readObject();
                 System.out.println("(Cliente " + uid + "): " + "HMAC recibido: " + Arrays.toString(hmacEstado));
 
-                cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
-                byte[] idEstadoDescifrado = cipher.doFinal(idCifrado);
+                Cipher cipher4 = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher4.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
+                byte[] idEstadoDescifrado = cipher4.doFinal(idEstado);
                 String idEstadoDescifradoString = new String(idEstadoDescifrado, StandardCharsets.UTF_8);
 
                 mac.init(hmacKey);
                 byte[] hmacCalculado = mac.doFinal(idEstadoDescifrado);
-                if (!Arrays.equals(hmac, hmacCalculado)) {
+                if (!Arrays.equals(hmacEstado, hmacCalculado)) {
                     throw new SecurityException("La HMAC del ID del paquete no es válida.");
                 }
 
-                System.out.println("(Cliente " + uid + "): " + "ID Estado descifrado: " + idEstadoDescifradoString);
+                System.out.println("(Cliente " + uid + "): " + "ID Estado descifrado: " + estadosMap.get(Integer.parseInt(idEstadoDescifradoString)));
                 out.writeObject("TERMINAR");
                 numConsultas--;
-        }
+                
+            }
 
 
         } catch (Exception e) {
