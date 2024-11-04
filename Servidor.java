@@ -16,6 +16,7 @@ public class Servidor {
     private static final int PUERTO = 12345;
     private static final String ALGORITMO_CIFRADO = "AES/CBC/PKCS5Padding";
     private static final String ALGORITMO_FIRMA = "SHA1withRSA";
+    private static int currentid = 0;
     
     private static PublicKey K_w_plus;
     private static PrivateKey K_w_minus;
@@ -27,11 +28,12 @@ public class Servidor {
             System.out.println("Servidor escuchando en el puerto " + PUERTO);
             cargarLlaves();
             while (true) {
+                currentid++;
                 Socket socket = serverSocket.accept();
                 System.out.println("Cliente conectado a nuevo hilo.");
                 
                 // Crear un nuevo hilo para manejar al cliente
-                Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus));
+                Thread clientThread = new Thread(new ClientHandler(socket, K_w_minus, currentid));
                 clientThread.start();
             }
         } catch (Exception e) {

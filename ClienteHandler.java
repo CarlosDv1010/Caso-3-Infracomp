@@ -17,8 +17,10 @@ class ClientHandler implements Runnable {
     private ObjectInputStream in;
     private ObjectOutputStream out;
     private static PrivateKey K_w_minus;
+    private int sid;
 
-    public ClientHandler(Socket socket, PrivateKey K_w_minus) {
+    public ClientHandler(Socket socket, PrivateKey K_w_minus, int sid) {
+        this.sid = sid;
         this.socket = socket;
         this.K_w_minus = K_w_minus;
         try {
@@ -34,16 +36,16 @@ class ClientHandler implements Runnable {
         try {
             // 1. Leer mensaje inicial
             String mensajeInicial = (String) in.readObject();
-            System.out.println("Mensaje inicial recibido: " + mensajeInicial);
+            System.out.println("(Hilo servidor " + sid + "): " + "Mensaje inicial recibido: " + mensajeInicial);
 
             // 2. Leer reto cifrado
             byte[] retoCifrado = (byte[]) in.readObject();
             // 3. Desencriptar reto
             byte[] Rta = descifrarReto(retoCifrado);
-            System.out.println("Rta calculada: " + Arrays.toString(Rta));
+            System.out.println("(Hilo servidor " + sid + "): " + "Rta calculada: " + Arrays.toString(Rta));
 
             // 4. Enviar respuesta al cliente
-            System.out.println("Enviando respuesta al cliente: " + Arrays.toString(Rta));
+            System.out.println("(Hilo servidor " + sid + "): " + "Enviando respuesta al cliente: " + Arrays.toString(Rta));
             out.write(Rta);
             out.flush();
 
@@ -67,24 +69,23 @@ class ClientHandler implements Runnable {
                 BigInteger Gx = G.modPow(x, P);
 
                 out.writeObject(G);
-                System.out.println("G enviado: " + G);
+                System.out.println("(Hilo servidor " + sid + "): " + "G enviado: " + G);
                 out.writeObject(P);
-                System.out.println("P enviado: " + P);
+                System.out.println("(Hilo servidor " + sid + "): " + "P enviado: " + P);
                 out.writeObject(Gx);
-                System.out.println("G^x enviado: " + Gx);
+                System.out.println("(Hilo servidor " + sid + "): " + "G^x enviado: " + Gx);
                 byte[] firma = firmarTupla(G, P, Gx);
-                System.out.println("Firma generada: " + Arrays.toString(firma));
+                System.out.println("(Hilo servidor " + sid + "): " + "Firma generada: " + Arrays.toString(firma));
                 out.writeObject(firma);
                 out.flush();
 
                 // 10. Leer respuesta del cliente
                 String respuestaCliente2 = (String) in.readObject();
                 if (!"OK".equals(respuestaCliente2)) {
-                    System.out.println("Cliente respondió ERROR");
+                    System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
                     throw new IllegalArgumentException("El cliente respondió con ERROR.");
                 }
-
-                System.out.println("Cliente respondió OK");
+                System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió OK");
 
                 BigInteger Gy = (BigInteger) in.readObject();
                 BigInteger Gyx = Gy.modPow(x, P);
@@ -108,8 +109,10 @@ class ClientHandler implements Runnable {
                 byte[] iv = new byte[16];
                 SecureRandom secureRandom = new SecureRandom();
                 secureRandom.nextBytes(iv);
+                out.writeObject(iv);
+                out.flush();
             } else {
-                System.out.println("Cliente respondió ERROR");
+                System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
             }
         } catch (Exception e) {
             e.printStackTrace();

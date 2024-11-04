@@ -1,4 +1,5 @@
 package Clientes;
+
 import java.io.*;
 import java.math.BigInteger;
 import java.net.*;
@@ -11,119 +12,123 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-
 import javax.crypto.Cipher;
 
-public class Cliente {
+public class Cliente implements Runnable {
     public static BigInteger G;
     public static BigInteger P;
     public static BigInteger Gx;
     private static PublicKey K_w_plus;
+    private int uid;
+
+    public Cliente(int uid) {
+        this.uid = uid;
+    }
+
     public static void main(String[] args) throws Exception {
+        // Cargar las llaves antes de iniciar los clientes
+        cargarLlaves();
+
+        // Crear múltiples hilos de cliente
+        int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        for (int i = 0; i < numeroClientes; i++) {
+            new Thread(new Cliente(i)).start();
+        }
+    }
+
+
+
+    @Override
+    public void run() {
         try (Socket socket = new Socket("localhost", 12345);
              ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {             
-                cargarLlaves();
-                
-                // 1 Cliente manda "SECINIT"
-                out.writeObject("SECINIT");
-                out.flush();
-                System.out.println("Mensaje inicial enviado.");
-
-                // 2a Cliente Calcula R=C(K_w+, Reto)
-                byte[] reto = new byte[16]; // Cambia esto según tu implementación
-                SecureRandom random = new SecureRandom();
-                random.nextBytes(reto);
-
-                Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-                cipher.init(Cipher.ENCRYPT_MODE, K_w_plus);
-                byte[] R = cipher.doFinal(reto);
-
-                // 2b Cliente envia R al servidor
-                out.writeObject(R);
-                out.flush();
-                System.out.println("Reto cifrado enviado.");
-
-                // 5 Cliente verifica Rta
-                byte[] RtaRecibido = new byte[reto.length];
-                in.read(RtaRecibido);
-                System.out.println("Rta recibida del servidor: " + Arrays.toString(RtaRecibido));
-                // 5 Cliente verifica Rta==Reto
-                if (MessageDigest.isEqual(RtaRecibido, reto)) {
-                    System.out.println("Rta verificada correctamente.");
-                    out.writeObject("OK");
-                    out.flush();
-                } else {
-                    System.out.println("Rta no válida.");
-                    out.writeObject("ERROR");
-                    out.flush();
-                }
-                
-
-                // 9 Cliente verifica F(K_w-,(G,P,G^x))
-                // Aquí debes implementar la verificación según tu lógica específica
-                // Recibir G, P y G^x
-                G = (BigInteger) in.readObject();
-                P = (BigInteger) in.readObject();
-                Gx = (BigInteger) in.readObject();
-                random = new SecureRandom();
-                BigInteger y;
-                do {
-                    y = new BigInteger(P.bitLength(), random); // Generar un BigInteger aleatorio en el rango de 0 a P-1
-                } while (y.compareTo(P) >= 0 || y.compareTo(BigInteger.ONE) < 0); // Asegurarse de que 0 < y < P
-                byte[] firma = (byte[]) in.readObject();
-
-                boolean firmaValida = verificarFirma(G, P, Gx, firma);
-                if (firmaValida) {
-                    System.out.println("Firma válida. Continuando...");
-                    // Continúa con el flujo del programa...
-                    out.writeObject("OK"); // Enviar OK al servidor
-                } else {
-                    System.out.println("Firma inválida.");
-                    System.out.println("ERROR");
-                    throw new Exception("Firma inválida.");
-                }
-                // Calcular G^y
-                BigInteger Gy = G.modPow(y, P);
-
-                out.writeObject(G);
-                System.out.println("G enviado: " + G);
-                out.writeObject(P);
-                System.out.println("P enviado: " + P);
-                out.writeObject(Gy);
-                System.out.println("G^y enviado: " + Gy);
-                out.flush();
-
-                BigInteger Gxy = Gx.modPow(y, P);
-
-                // Convertir Gxy en bytes
-                byte[] gxyBytes = Gxy.toByteArray();
-
-                // Verificar si hay suficientes bytes para las dos llaves
-                if (gxyBytes.length < (256 / 8 + 384 / 8)) {
-                    throw new IllegalArgumentException("El valor Gxy no tiene suficientes bytes para generar las llaves.");
-                }
-
-                // Derivar la llave AES (256 bits = 32 bytes)
-                byte[] aesKeyBytes = Arrays.copyOfRange(gxyBytes, 0, 32);
-                SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
-
-                // Derivar la llave HMAC (384 bits = 48 bytes)
-                byte[] hmacKeyBytes = Arrays.copyOfRange(gxyBytes, 32, 32 + 48);
-                SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA384");
-
-                
-
-            }
-        
+             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
             
+            // Aquí comienza la lógica del cliente
+            out.writeObject("SECINIT Cliente " + uid);
+            out.flush();
+            System.out.println("(Cliente " + uid + "): " + "Mensaje inicial enviado.");
+
+            // Generar y enviar el reto cifrado
+            byte[] reto = new byte[16];
+            SecureRandom random = new SecureRandom();
+            random.nextBytes(reto);
+
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, K_w_plus);
+            byte[] R = cipher.doFinal(reto);
+
+            out.writeObject(R);
+            out.flush();
+            System.out.println("(Cliente " + uid + "): " + "Reto cifrado enviado.");
+
+            // Verificar la respuesta
+            byte[] RtaRecibido = new byte[reto.length];
+            in.read(RtaRecibido);
+            System.out.println("(Cliente " + uid + "): " + "Rta recibida del servidor: " + Arrays.toString(RtaRecibido));
+
+            if (MessageDigest.isEqual(RtaRecibido, reto)) {
+                System.out.println("(Cliente " + uid + "): " + "Rta verificada correctamente.");
+                out.writeObject("OK");
+                out.flush();
+            } else {
+                System.out.println("(Cliente " + uid + "): " + "Rta no válida.");
+                out.writeObject("ERROR");
+                out.flush();
+            }
+
+            // Recibir y verificar los valores G, P y Gx
+            G = (BigInteger) in.readObject();
+            P = (BigInteger) in.readObject();
+            Gx = (BigInteger) in.readObject();
+
+            random = new SecureRandom();
+            BigInteger y;
+            do {
+                y = new BigInteger(P.bitLength(), random);
+            } while (y.compareTo(P) >= 0 || y.compareTo(BigInteger.ONE) < 0);
+
+            byte[] firma = (byte[]) in.readObject();
+            boolean firmaValida = verificarFirma(G, P, Gx, firma);
+            if (firmaValida) {
+                System.out.println("(Cliente " + uid + "): " + "Firma válida. Continuando...");
+                out.writeObject("OK");
+            } else {
+                System.out.println("(Cliente " + uid + "): " + "Firma inválida.");
+                throw new Exception("Firma inválida.");
+            }
+
+            BigInteger Gy = G.modPow(y, P);
+            out.writeObject(G);
+            out.writeObject(P);
+            out.writeObject(Gy);
+            out.flush();
+
+            BigInteger Gxy = Gx.modPow(y, P);
+            byte[] gxyBytes = Gxy.toByteArray();
+
+            if (gxyBytes.length < (256 / 8 + 384 / 8)) {
+                throw new IllegalArgumentException("El valor Gxy no tiene suficientes bytes para generar las llaves.");
+            }
+
+            byte[] aesKeyBytes = Arrays.copyOfRange(gxyBytes, 0, 32);
+            SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+
+            byte[] hmacKeyBytes = Arrays.copyOfRange(gxyBytes, 32, 32 + 48);
+            SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA384");
+
+            byte[] iv = (byte[]) in.readObject();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private static boolean verificarFirma(BigInteger G, BigInteger P, BigInteger Gx, byte[] firma) {
         try {
             Signature signature = Signature.getInstance("SHA1withRSA");
             signature.initVerify(K_w_plus);
-            // Crear la representación de la tupla
+
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
             objectOutputStream.writeObject(G);
@@ -132,7 +137,6 @@ public class Cliente {
             objectOutputStream.flush();
             byte[] tuplaBytes = byteArrayOutputStream.toByteArray();
 
-            // Verificar la firma
             signature.update(tuplaBytes);
             return signature.verify(firma);
         } catch (Exception e) {
@@ -140,23 +144,12 @@ public class Cliente {
             return false;
         }
     }
-    // Métodos para cifrado y HMAC
-    public static byte[] cifrar(byte[] key, byte[] data) {
-        return data;
-        // Implementa el cifrado
-    }
 
-    public static byte[] calcularHMAC(byte[] key, byte[] data) {
-        return data;
-        // Implementa el cálculo de HMAC
-    }
     private static void cargarLlaves() throws Exception {
-        // Cargar las llaves pública y privada desde los archivos
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
         try (FileInputStream fis = new FileInputStream("Clientes/public.key")) {
             byte[] keyBytes = fis.readAllBytes();
             K_w_plus = keyFactory.generatePublic(new X509EncodedKeySpec(keyBytes));
         }
     }
-    
 }
