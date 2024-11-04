@@ -17,7 +17,7 @@ import javax.crypto.Cipher;
 public class Cliente implements Runnable {
     public static BigInteger G;
     public static BigInteger P;
-    public static BigInteger Gx;
+    public BigInteger Gx;
     private static PublicKey K_w_plus;
     private int uid;
 
@@ -31,7 +31,7 @@ public class Cliente implements Runnable {
 
         // Crear múltiples hilos de cliente
         int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
-        for (int i = 0; i < numeroClientes; i++) {
+        for (int i = 1; i <= numeroClientes; i++) {
             new Thread(new Cliente(i)).start();
         }
     }
@@ -79,22 +79,27 @@ public class Cliente implements Runnable {
 
             // Recibir y verificar los valores G, P y Gx
             G = (BigInteger) in.readObject();
+            System.out.println("(Cliente " + uid + "): " + "G recibido: " + G);
             P = (BigInteger) in.readObject();
+            System.out.println("(Cliente " + uid + "): " + "P recibido: " + P);
             Gx = (BigInteger) in.readObject();
-
+            System.out.println("(Cliente " + uid + "): " + "G^x recibido: " + Gx);
+            byte[] firma = (byte[]) in.readObject();
             random = new SecureRandom();
             BigInteger y;
             do {
                 y = new BigInteger(P.bitLength(), random);
             } while (y.compareTo(P) >= 0 || y.compareTo(BigInteger.ONE) < 0);
 
-            byte[] firma = (byte[]) in.readObject();
+            
+            System.out.println("(Cliente " + uid + "): " + "Firma recibida: " + Arrays.toString(firma));
             boolean firmaValida = verificarFirma(G, P, Gx, firma);
             if (firmaValida) {
                 System.out.println("(Cliente " + uid + "): " + "Firma válida. Continuando...");
                 out.writeObject("OK");
             } else {
                 System.out.println("(Cliente " + uid + "): " + "Firma inválida.");
+                out.writeObject("NO");
                 throw new Exception("Firma inválida.");
             }
 
