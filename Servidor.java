@@ -1,64 +1,135 @@
-import java.security.*;
 import java.io.*;
+import java.net.*;
+import java.security.*;
+import java.security.spec.PKCS8EncodedKeySpec;
+import javax.crypto.Cipher;
 
 public class Servidor {
-    // Constantes de estado de los paquetes
-    public static final int ENOFICINA = 0;
-    public static final int RECOGIDO = 1;
-    public static final int ENCLASIFICACION = 2;
-    public static final int DESPACHADO = 3;
-    public static final int ENENTREGA = 4;
-    public static final int ENTREGADO = 5;
-    public static final int DESCONOCIDO = 6;
-
-    // Método para generar y guardar las llaves
-    public static void generarClaves() {
-        try {
-            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-            keyGen.initialize(1024);
-            KeyPair pair = keyGen.generateKeyPair();
-
-            PrivateKey privateKey = pair.getPrivate();
-            PublicKey publicKey = pair.getPublic();
-
-            try (FileOutputStream publicOut = new FileOutputStream("Clientes/public.key")) {
-                publicOut.write(publicKey.getEncoded());
-            }
-            
-            try (FileOutputStream privateOut = new FileOutputStream("private.key")) {
-                privateOut.write(privateKey.getEncoded());
-            }
-
-            System.out.println("Las llaves se generaron y guardaron correctamente.");
-        } catch (NoSuchAlgorithmException e) {
-            System.err.println("Error al generar las llaves RSA: " + e.getMessage());
-        } catch (IOException e) {
-            System.err.println("Error al guardar las llaves en archivos: " + e.getMessage());
-        }
-    }
+    private static PrivateKey privateKey;
 
     public static void main(String[] args) {
-        System.out.println("Seleccione una opción:");
-        System.out.println("1. Generar llaves del servidor");
-        System.out.println("2. Iniciar el servidor");
+        try {
+            // Cargar la llave privada del servidor
+            privateKey = cargarLlavePrivada("private.key");
 
-        // Simulación de entrada del usuario para ejecutar la opción seleccionada
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
-            String option = reader.readLine();
-            if ("1".equals(option)) {
-                generarClaves();
-            } else if ("2".equals(option)) {
-                iniciarServidor();
-            } else {
-                System.out.println("Opción no válida.");
+            // Iniciar el servidor en el puerto 12345
+            ServerSocket serverSocket = new ServerSocket(12345);
+            System.out.println("Servidor iniciado en el puerto 12345");
+
+            while (true) {
+                Socket clientSocket = serverSocket.accept();  
+                System.out.println("Cliente conectado");
+                new Thread(new ClienteHandler(clientSocket)).start(); 
             }
-        } catch (IOException e) {
-            System.err.println("Error en la entrada del usuario: " + e.getMessage());
+        } catch (IOException | GeneralSecurityException e) {
+            System.err.println("Error en el servidor: " + e.getMessage());
         }
     }
 
-    public static void iniciarServidor() {
-        // Método para iniciar el servidor (opción 2)
-        System.out.println("Iniciando servidor...");
+    private static class ClienteHandler implements Runnable {
+        private Socket clientSocket;
+
+        public ClienteHandler(Socket clientSocket) {
+            this.clientSocket = clientSocket;
+        }
+
+        @Override
+        public void run() {
+            try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream());
+                 ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream())) {
+
+                // Leer el mensaje inicial del cliente
+                String secInit = in.readUTF();
+                if ("SECINIT".equals(secInit)) {
+                    System.out.println("Recibido mensaje inicial SECINIT");
+                    // Leer el reto cifrado del cliente
+                    byte[] retoCifrado = (byte[]) in.readObject();
+                    System.out.println("Reto cifrado recibido.");
+
+                    String reto = descifrarConRSA(retoCifrado, privateKey);
+                    System.out.println("Reto descifrado: " + reto);
+
+                    // Firmar la respuesta usando la llave privada
+                    byte[] respuestaFirmada;
+                    try {
+                        respuestaFirmada = firmarDatos(reto, privateKey);
+                        out.writeObject(respuestaFirmada);
+                        out.flush();
+                        System.out.println("Respuesta firmada enviada al cliente.");
+                    } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException e) {
+                        System.err.println("Error al firmar los datos: " + e.getMessage());
+                        return; // Finaliza el manejo de esta conexión
+                    }
+
+                    // Esperar respuesta del cliente
+                    String respuestaCliente = in.readUTF();
+                    System.out.println("Respuesta del cliente: " + respuestaCliente);
+                    if ("OK".equals(respuestaCliente)) {
+                        // Generar G, P, G^x
+                        int G = 5; 
+                        int P = 23; 
+                        int x = 6; 
+                        int Gx = (int) Math.pow(G, x) % P;
+
+                        // Enviar G, P, G^x al cliente
+                        out.writeInt(G);
+                        out.writeInt(P);
+                        out.writeInt(Gx);
+                        out.flush();
+                        System.out.println("Valores G, P, G^x enviados.");
+
+                        // Leer respuesta del cliente
+                        byte[] response = (byte[]) in.readObject();
+                        System.out.println("Respuesta del cliente verificada: " + new String(response));
+
+                        // Generar y enviar IV al cliente
+                        byte[] iv = generarIV();
+                        out.writeObject(iv);
+                        out.flush();
+                        System.out.println("IV enviado al cliente.");
+
+                        // Esperar datos cifrados y HMAC del cliente
+                        byte[] datosCifrados = (byte[]) in.readObject();
+                        byte[] hmac = (byte[]) in.readObject();
+
+                        // Aquí puedes validar los datos cifrados y el HMAC
+                        System.out.println("Datos cifrados recibidos y HMAC validado.");
+                    }
+                }
+                clientSocket.close();
+            } catch (IOException | ClassNotFoundException | GeneralSecurityException e) {
+                System.err.println("Error en el manejador del cliente: " + e.getMessage());
+            }
+        }
+    }
+
+    private static PrivateKey cargarLlavePrivada(String archivoLlave) throws IOException, GeneralSecurityException {
+        FileInputStream fis = new FileInputStream(archivoLlave);
+        byte[] bytesLlave = new byte[fis.available()];
+        fis.read(bytesLlave);
+        fis.close();
+
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(bytesLlave);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        return keyFactory.generatePrivate(spec);
+    }
+
+    private static String descifrarConRSA(byte[] datosCifrados, PrivateKey llavePrivada) throws GeneralSecurityException {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, llavePrivada);
+        return new String(cipher.doFinal(datosCifrados));
+    }
+
+    private static byte[] firmarDatos(String datos, PrivateKey llavePrivada) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        signature.initSign(llavePrivada);
+        signature.update(datos.getBytes());
+        return signature.sign();
+    }
+
+    private static byte[] generarIV() {
+        byte[] iv = new byte[16]; 
+        new SecureRandom().nextBytes(iv);
+        return iv;
     }
 }
