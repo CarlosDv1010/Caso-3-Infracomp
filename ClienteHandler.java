@@ -23,7 +23,27 @@ class ClientHandler implements Runnable {
     private static PrivateKey K_w_minus;
     private int sid;
     private static ArrayList<Paquete> tablaPaquetes;
-
+    class StreamGobbler extends Thread {
+        private InputStream inputStream;
+        private StringBuilder output;
+    
+        public StreamGobbler(InputStream inputStream, StringBuilder output) {
+            this.inputStream = inputStream;
+            this.output = output;
+        }
+    
+        @Override
+        public void run() {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
     public ClientHandler(Socket socket, PrivateKey K_w_minusR, int sid, ArrayList<Paquete> tablaPaquetesR) {
         tablaPaquetes = tablaPaquetesR;
         this.sid = sid;
@@ -69,20 +89,24 @@ class ClientHandler implements Runnable {
                     String opensslPath = "Openssl\\openssl";
                     Process process = Runtime.getRuntime().exec(opensslPath + " dhparam -text 1024");
 
-                    // Leer la salida del comando
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    String line;
+                    // Almacenar la salida estándar y de error
                     StringBuilder output = new StringBuilder();
-                    
-                    // Almacenar la salida completa
-                    while ((line = reader.readLine()) != null) {
-                        output.append(line).append("\n");
-                    }
-                    reader.close();
+                    StringBuilder errorOutput = new StringBuilder();
+
+                    // Crear y empezar los hilos para capturar stdout y stderr
+                    StreamGobbler outputGobbler = new StreamGobbler(process.getInputStream(), output);
+                    StreamGobbler errorGobbler = new StreamGobbler(process.getErrorStream(), errorOutput);
+                    outputGobbler.start();
+                    errorGobbler.start();
+
+                    // Esperar a que el proceso termine
                     process.waitFor();
+                    outputGobbler.join();  // Asegurar que se completa la lectura de stdout
+                    errorGobbler.join();   // Asegurar que se completa la lectura de stderr
 
                     // Salida del comando OpenSSL
                     String opensslOutput = output.toString();
+
 
                     // Crear patrones para encontrar "prime" y "generator"
                     Pattern primePattern = Pattern.compile("prime:.*?\\n?\\s*([0-9A-Fa-f:\\s]+)", Pattern.DOTALL);
