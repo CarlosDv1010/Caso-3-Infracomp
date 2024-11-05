@@ -7,6 +7,9 @@ import javax.crypto.spec.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -56,11 +59,60 @@ class ClientHandler implements Runnable {
                 String respuestaCliente = (String) in.readObject();
                 
                 if ("OK".equals(respuestaCliente)) {
+                    System.out.println("(Hilo servidor " + sid + "): " + "Generando P y G");
+
+                    String opensslPath = "Openssl\\openssl";
+                    Process process = Runtime.getRuntime().exec(opensslPath + " dhparam -text 1024");
+
+                    // Leer la salida del comando
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                    String line;
+                    StringBuilder output = new StringBuilder();
+                    
+                    // Almacenar la salida completa
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                    }
+                    reader.close();
+                    process.waitFor();
+
+                    // Salida del comando OpenSSL
+                    String opensslOutput = output.toString();
+
+                    // Crear patrones para encontrar "prime" y "generator"
+                    Pattern primePattern = Pattern.compile("prime:.*?\\n?\\s*([0-9A-Fa-f:\\s]+)", Pattern.DOTALL);
+                    Pattern generatorPattern = Pattern.compile("generator:.*?(\\d+)", Pattern.DOTALL);
+
+                    Matcher primeMatcher = primePattern.matcher(opensslOutput);
+                    Matcher generatorMatcher = generatorPattern.matcher(opensslOutput);
+
+                    BigInteger P = null;
+                    BigInteger G = null;
+
+                    if (primeMatcher.find()) {
+                        // Eliminar los ":" y convertir a BigInteger
+                        String primeHex = primeMatcher.group(1).replace(":", "").replace("\n", "").replace(" ", "").trim();
+                        P = new BigInteger(primeHex, 16);
+                    }
+
+                    if (generatorMatcher.find()) {
+                        // Convertir el generador a BigInteger
+                        String generatorStr = generatorMatcher.group(1).trim();
+                        G = new BigInteger(generatorStr);
+                    }
+
+                    if (P != null && G != null) {
+                        System.out.println("P (prime): " + P);
+                        System.out.println("G (generator): " + G);
+                    } else {
+                        System.out.println("No se encontraron los valores de P y G.");
+                    }
+
+
                     // 7. Generar G, P, G^x
                     String string = "00:de:07:5c:4d:2c:2d:cb:da:0b:1c:8f:62:87:22:d7:e7:c2:9c:f6:e7:a6:b7:da:0b:57:4e:52:96:dd:d4:8f:7a:79:a5:9e:3c:8d:f4:ce:29:83:6c:75:60:ad:a2:19:5e:44:67:a3:1b:50:52:8e:bf:d0:66:bb:4f:ee:85:52:56:3b:61:16:12:82:6e:b5:1d:20:4f:7a:cc:f2:fd:3b:86:ef:7c:7d:00:b9:3d:73:e8:8f:58:0b:56:c2:41:c0:53:b4:19:ef:23:6f:c0:38:6e:f1:87:34:57:38:8e:f1:f4:a8:4d:21:ad:a3:16:7c:81:89:46:51:88:53:05:a0:cf";
                     String string2 = string.replace(":", "");
-                    BigInteger G = new BigInteger("2");
-                    BigInteger P = new BigInteger(string2, 16);
+
                     SecureRandom random = new SecureRandom();
                     BigInteger x;
                     

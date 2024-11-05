@@ -49,9 +49,9 @@ public class Cliente implements Runnable {
         cargarLlaves();
 
         // Crear múltiples hilos de cliente
-        int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        int numeroClientes = 1; // Cambia este número para ajustar la cantidad de clientes concurrentes
         for (int i = 1; i <= numeroClientes; i++) {
-            new Thread(new Cliente(i, i, 10)).start();
+            new Thread(new Cliente(i, i, 1)).start();
         }
     }
 
@@ -59,8 +59,6 @@ public class Cliente implements Runnable {
 
     @Override
     public void run() {
-        
-        
         try (Socket socket = new Socket("localhost", 12345);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
