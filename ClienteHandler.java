@@ -49,7 +49,11 @@ class ClientHandler implements Runnable {
                 // 2. Leer reto cifrado
                 byte[] retoCifrado = (byte[]) in.readObject();
                 // 3. Desencriptar reto
+                // Temporizador para responder el reto
+                long startReto = System.currentTimeMillis();
                 byte[] Rta = descifrarReto(retoCifrado);
+                long endReto = System.currentTimeMillis();
+                System.out.println("Tiempo para responder el reto: " + (endReto - startReto) + " ms");
 
                 // 4. Enviar respuesta al cliente
                 out.write(Rta);
@@ -60,7 +64,8 @@ class ClientHandler implements Runnable {
                 
                 if ("OK".equals(respuestaCliente)) {
                     System.out.println("(Hilo servidor " + sid + "): " + "Generando P y G");
-
+                    // Temporizador para generar G, P y G^x
+                    long startGen = System.currentTimeMillis();
                     String opensslPath = "Openssl\\openssl";
                     Process process = Runtime.getRuntime().exec(opensslPath + " dhparam -text 1024");
 
@@ -123,13 +128,16 @@ class ClientHandler implements Runnable {
                     // Calcular G^x
                     BigInteger Gx = G.modPow(x, P);
 
+                    long endGen = System.currentTimeMillis();
+                    System.out.println("Tiempo para generar G, P y G^x: " + (endGen - startGen) + " ms");
                     out.writeObject(G);
                     out.writeObject(P);
                     out.writeObject(Gx);
                     byte[] firma = firmarTupla(G, P, Gx);
                     out.writeObject(firma);
                     out.flush();
-
+                    // Temporizador para verificar la consulta
+                    long startVerif = System.currentTimeMillis();
                     // 10. Leer respuesta del cliente
                     String respuestaCliente2 = (String) in.readObject();
                     if (!"OK".equals(respuestaCliente2)) {
@@ -201,7 +209,8 @@ class ClientHandler implements Runnable {
                     int idUsuario = Integer.parseInt(id);
                     int idPaqueteInt = Integer.parseInt(idPaquete);
                     int estadoPaquete = obtenerEstadoPaquete(tablaPaquetes, idUsuario, idPaqueteInt);
-
+                    long endVerif = System.currentTimeMillis();
+                    System.out.println("Tiempo para verificar la consulta: " + (endVerif - startVerif) + " ms");
                     System.out.println("(Hilo servidor " + sid + "): " + "Estado del paquete: " + estadoPaquete);
 
                     // Cifrar el estado del paquete
