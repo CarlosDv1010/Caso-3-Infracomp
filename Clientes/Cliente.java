@@ -49,7 +49,7 @@ public class Cliente implements Runnable {
         cargarLlaves();
 
         // Crear múltiples hilos de cliente
-        int numeroClientes = 1; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
         for (int i = 1; i <= numeroClientes; i++) {
             new Thread(new Cliente(i, i, 1)).start();
         }
@@ -130,67 +130,69 @@ public class Cliente implements Runnable {
                     throw new IllegalArgumentException("El valor Gxy no tiene suficientes bytes para generar las llaves.");
                 }
 
-                byte[] aesKeyBytes = Arrays.copyOfRange(gxyBytes, 0, 32);
+                MessageDigest sha512 = MessageDigest.getInstance("SHA-512");
+                byte[] digest = sha512.digest(gxyBytes);
+
+                // Dividir el digest en dos mitades: primeros 256 bits (32 bytes) para la llave AES
+                byte[] aesKeyBytes = Arrays.copyOfRange(digest, 0, 32);
                 SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-                byte[] hmacKeyBytes = Arrays.copyOfRange(gxyBytes, 32, 32 + 48);
-                SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA384");
+                // Últimos 256 bits (32 bytes) para la llave HMAC
+                byte[] hmacKeyBytes = Arrays.copyOfRange(digest, 32, 64);
+                SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA256");
 
                 byte[] iv = (byte[]) in.readObject();
-
                 IvParameterSpec ivSpec = new IvParameterSpec(iv);
-                Cipher cipher2 = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                cipher2.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
+
+                // Cifrar el ID del usuario
+                cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
 
                 String id = String.format("%d", uid);
                 byte[] idBytes = id.getBytes(StandardCharsets.UTF_8);
+                byte[] idCifrado = cipher.doFinal(idBytes);
 
-                byte[] idCifrado = cipher2.doFinal(idBytes);
-
-                Mac mac = Mac.getInstance("HmacSHA384");
+                // Generar la HMAC del ID del usuario
+                Mac mac = Mac.getInstance("HmacSHA256");
                 mac.init(hmacKey);
-
                 byte[] hmac = mac.doFinal(idBytes);
 
-                IvParameterSpec ivSpec2 = new IvParameterSpec(iv);
-                Cipher cipher3 = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                cipher3.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec2);
-
+                // Cifrar el ID del paquete
                 String idPaquete = String.format("%d", currentPaqueteId);
                 byte[] idPaqueteBytes = idPaquete.getBytes(StandardCharsets.UTF_8);
+                byte[] idPaqueteCifrado = cipher.doFinal(idPaqueteBytes);
 
-                byte[] idPaqueteCifrado = cipher3.doFinal(idPaqueteBytes);
+                // Generar la HMAC del ID del paquete
+                byte[] hmacPaquete = mac.doFinal(idPaqueteBytes);
 
-                Mac macPaquete = Mac.getInstance("HmacSHA384");
-                macPaquete.init(hmacKey);
-
-                byte[] hmacPaquete = macPaquete.doFinal(idPaqueteBytes);
-
-
+                // Enviar los datos cifrados y las HMACs al servidor
                 out.writeObject(idCifrado);
                 out.writeObject(hmac);
                 out.writeObject(idPaqueteCifrado);
                 out.writeObject(hmacPaquete);
                 out.flush();
 
-                // Recibir y verificar la respuesta
+                // Recibir y verificar la respuesta del servidor
                 byte[] idEstado = (byte[]) in.readObject();
                 byte[] hmacEstado = (byte[]) in.readObject();
 
-                Cipher cipher4 = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                cipher4.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
-                byte[] idEstadoDescifrado = cipher4.doFinal(idEstado);
+                // Descifrar el ID del estado
+                cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
+                byte[] idEstadoDescifrado = cipher.doFinal(idEstado);
                 String idEstadoDescifradoString = new String(idEstadoDescifrado, StandardCharsets.UTF_8);
 
-                mac.init(hmacKey);
+                // Verificar la HMAC del estado
                 byte[] hmacCalculado = mac.doFinal(idEstadoDescifrado);
                 if (!Arrays.equals(hmacEstado, hmacCalculado)) {
-                    throw new SecurityException("La HMAC del ID del paquete no es válida.");
+                    throw new SecurityException("La HMAC del ID del estado no es válida.");
                 }
 
                 System.out.println("(Cliente " + uid + "): " + "ID Estado descifrado: " + estadosMap.get(Integer.parseInt(idEstadoDescifradoString)));
+
+                // Enviar confirmación de finalización
                 out.writeObject("TERMINAR");
                 numConsultas--;
+
                 
             }
 

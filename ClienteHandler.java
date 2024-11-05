@@ -143,36 +143,37 @@ class ClientHandler implements Runnable {
 
                     byte[] gxyBytes = Gyx.toByteArray();
 
-                    // Verificar si hay suficientes bytes para las dos llaves
-                    if (gxyBytes.length < (256 / 8 + 384 / 8)) {
-                        throw new IllegalArgumentException("El valor Gxy no tiene suficientes bytes para generar las llaves.");
-                    }
+                    // Calcular el digest SHA-512 de la llave maestra
+                    MessageDigest sha512 = MessageDigest.getInstance("SHA-512");
+                    byte[] digest = sha512.digest(gxyBytes);
 
-                    // Derivar la llave AES (256 bits = 32 bytes)
-                    byte[] aesKeyBytes = Arrays.copyOfRange(gxyBytes, 0, 32);
+                    // Dividir el digest en dos mitades: primeros 256 bits (32 bytes) para la llave AES
+                    byte[] aesKeyBytes = Arrays.copyOfRange(digest, 0, 32);
                     SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-                    // Derivar la llave HMAC (384 bits = 48 bytes)
-                    byte[] hmacKeyBytes = Arrays.copyOfRange(gxyBytes, 32, 32 + 48);
-                    SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA384");
+                    // Últimos 256 bits (32 bytes) para la llave HMAC
+                    byte[] hmacKeyBytes = Arrays.copyOfRange(digest, 32, 64);
+                    SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA256");
 
                     // Generar un vector de inicialización (IV) aleatorio de 16 bytes
                     byte[] iv = new byte[16];
                     SecureRandom secureRandom = new SecureRandom();
                     secureRandom.nextBytes(iv);
+
                     out.writeObject(iv);
                     out.flush();
 
+                    // Recibir los datos cifrados y las HMACs del cliente
                     byte[] idCifrado = (byte[]) in.readObject();
                     byte[] hmac = (byte[]) in.readObject();
                     byte[] idPaqueteCifrado = (byte[]) in.readObject();
                     byte[] hmacPaquete = (byte[]) in.readObject();
 
                     IvParameterSpec ivSpec = new IvParameterSpec(iv);
-                    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                    cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
 
                     // Descifrar el ID
+                    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                    cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
                     byte[] idDescifrado = cipher.doFinal(idCifrado);
                     String id = new String(idDescifrado, StandardCharsets.UTF_8);
 
@@ -180,7 +181,8 @@ class ClientHandler implements Runnable {
                     byte[] idPaqueteDescifrado = cipher.doFinal(idPaqueteCifrado);
                     String idPaquete = new String(idPaqueteDescifrado, StandardCharsets.UTF_8);
 
-                    Mac mac = Mac.getInstance("HmacSHA384");
+                    // Verificar las HMACs usando la clave HMAC derivada
+                    Mac mac = Mac.getInstance("HmacSHA256");
                     mac.init(hmacKey);
 
                     // Generar HMAC para el ID descifrado
@@ -202,23 +204,24 @@ class ClientHandler implements Runnable {
 
                     System.out.println("(Hilo servidor " + sid + "): " + "Estado del paquete: " + estadoPaquete);
 
+                    // Cifrar el estado del paquete
                     Cipher cipher2 = Cipher.getInstance("AES/CBC/PKCS5Padding");
                     cipher2.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
 
                     String idEstado = String.format("%d", estadoPaquete);
                     byte[] idBytes = idEstado.getBytes(StandardCharsets.UTF_8);
-
                     byte[] idCifradoEstado = cipher2.doFinal(idBytes);
 
+                    // Generar HMAC para el estado cifrado
                     mac.init(hmacKey);
-
                     byte[] hmacEstado = mac.doFinal(idBytes);
 
+                    // Enviar el estado cifrado y la HMAC al cliente
                     out.writeObject(idCifradoEstado);
                     out.writeObject(hmacEstado);
                     out.flush();
 
-                    // Recibir y verificar la respuesta
+                    // Recibir y verificar la respuesta del cliente
                     String res = (String) in.readObject();
                     if (!"TERMINAR".equals(res)) {
                         throw new IllegalArgumentException("El cliente no envió el mensaje TERMINAR.");
@@ -269,7 +272,6 @@ class ClientHandler implements Runnable {
     }
 
     public static int obtenerEstadoPaquete(ArrayList<Paquete> tabla, int idUsuario, int idPaquete) {
-        System.out.println(idPaquete);
         for (Paquete paquete : tabla) {
             if (paquete.loginUsuario == idUsuario && paquete.idPaquete == idPaquete) {
                 return paquete.estado;
