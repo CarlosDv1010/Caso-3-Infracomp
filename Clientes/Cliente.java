@@ -49,9 +49,9 @@ public class Cliente implements Runnable {
         cargarLlaves();
 
         // Crear múltiples hilos de cliente
-        int numeroClientes = 5; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        int numeroClientes = 1; // Cambia este número para ajustar la cantidad de clientes concurrentes
         for (int i = 1; i <= numeroClientes; i++) {
-            new Thread(new Cliente(i, i, 1)).start();
+            new Thread(new Cliente(i, i, 32)).start();
         }
     }
 
