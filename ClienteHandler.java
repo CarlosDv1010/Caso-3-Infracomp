@@ -4,13 +4,9 @@ import java.net.*;
 import java.security.*;
 import javax.crypto.*;
 import javax.crypto.spec.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import java.util.ArrayList;
@@ -83,7 +79,7 @@ class ClientHandler implements Runnable {
                 String respuestaCliente = (String) in.readObject();
                 
                 if ("OK".equals(respuestaCliente)) {
-                    System.out.println("(Hilo servidor " + sid + "): " + "Generando P y G");
+                    // System.out.println("(Hilo servidor " + sid + "): " + "Generando P y G");
                     // Temporizador para generar G, P y G^x
                     long startGen = System.currentTimeMillis();
                     String opensslPath = "Openssl\\openssl";
@@ -131,10 +127,10 @@ class ClientHandler implements Runnable {
                     }
 
                     if (P != null && G != null) {
-                        System.out.println("P (prime): " + P);
-                        System.out.println("G (generator): " + G);
+                        // System.out.println("P (prime): " + P);
+                        // System.out.println("G (generator): " + G);
                     } else {
-                        System.out.println("No se encontraron los valores de P y G.");
+                        // System.out.println("No se encontraron los valores de P y G.");
                     }
 
 
@@ -165,10 +161,10 @@ class ClientHandler implements Runnable {
                     // 10. Leer respuesta del cliente
                     String respuestaCliente2 = (String) in.readObject();
                     if (!"OK".equals(respuestaCliente2)) {
-                        System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
+                        // System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
                         throw new IllegalArgumentException("El cliente respondió con ERROR.");
                     }
-                    System.out.println("(Hilo servidor " + sid + "): " + " Cliente respondió OK");
+                    // System.out.println("(Hilo servidor " + sid + "): " + " Cliente respondió OK");
 
                     BigInteger Gy = (BigInteger) in.readObject();
                     BigInteger Gyx = Gy.modPow(x, P);
@@ -229,7 +225,7 @@ class ClientHandler implements Runnable {
                         throw new SecurityException("La HMAC del ID de Paquete no es válida.");
                     }
 
-                    System.out.println("(Hilo servidor " + sid + "): " + "Verificando estado del paquete...");
+                    // System.out.println("(Hilo servidor " + sid + "): " + "Verificando estado del paquete...");
                     int idUsuario = Integer.parseInt(id);
                     int idPaqueteInt = Integer.parseInt(idPaquete);
                     int estadoPaquete = obtenerEstadoPaquete(tablaPaquetes, idUsuario, idPaqueteInt);
@@ -260,12 +256,12 @@ class ClientHandler implements Runnable {
                         throw new IllegalArgumentException("El cliente no envió el mensaje TERMINAR.");
                     }
                     else {
-                        System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió TERMINAR");
+                        // System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió TERMINAR");
                     }
 
 
                 } else {
-                    System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
+                    // System.out.println("(Hilo servidor " + sid + "): " + "Cliente respondió ERROR");
                 }
                 numConsultas--;
             }

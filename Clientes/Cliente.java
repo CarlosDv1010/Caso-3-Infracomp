@@ -49,9 +49,9 @@ public class Cliente implements Runnable {
         cargarLlaves();
 
         // Crear múltiples hilos de cliente
-        int numeroClientes = 1; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        int numeroClientes = 32; // Cambia este número para ajustar la cantidad de clientes concurrentes
         for (int i = 1; i <= numeroClientes; i++) {
-            new Thread(new Cliente(i, i, 32)).start();
+            new Thread(new Cliente(i, i, 1)).start();
         }
     }
 
@@ -72,7 +72,7 @@ public class Cliente implements Runnable {
                 System.out.println(uid + " SECINIT");
 
                 // Generar y enviar el reto cifrado
-                byte[] reto = new byte[16];
+                byte[] reto = new byte[117];
                 SecureRandom random = new SecureRandom();
                 random.nextBytes(reto);
 
