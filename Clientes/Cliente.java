@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.Cipher;
+import java.util.Scanner;
+
 
 public class Cliente implements Runnable {
     public static BigInteger G;
@@ -45,13 +47,18 @@ public class Cliente implements Runnable {
         estadosMap.put(5, "ENENTREGA");
         estadosMap.put(6, "ENTREGADO");
         estadosMap.put(7, "DESCONOCIDO");
-        // Cargar las llaves antes de iniciar los clientes
         cargarLlaves();
 
-        // Crear múltiples hilos de cliente
-        int numeroClientes = 32; // Cambia este número para ajustar la cantidad de clientes concurrentes
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("Introduce el número de clientes: ");
+        int numeroClientes = scanner.nextInt();
+
+        System.out.print("Introduce el número de consultas por cliente: ");
+        int numConsultas = scanner.nextInt();
+
         for (int i = 1; i <= numeroClientes; i++) {
-            new Thread(new Cliente(i, i, 1)).start();
+            new Thread(new Cliente(i, i, numConsultas)).start();
         }
     }
 
@@ -66,12 +73,10 @@ public class Cliente implements Runnable {
             out.flush();
             while (numConsultas > 0){
                 int currentPaqueteId = paqueteIdInicial + numConsultas - 1;
-                // Aquí comienza la lógica del cliente
                 out.writeObject("SECINIT Cliente " + uid);
                 out.flush();
                 System.out.println(uid + " SECINIT");
 
-                // Generar y enviar el reto cifrado
                 byte[] reto = new byte[117];
                 SecureRandom random = new SecureRandom();
                 random.nextBytes(reto);
@@ -83,7 +88,6 @@ public class Cliente implements Runnable {
                 out.writeObject(R);
                 out.flush();
 
-                // Verificar la respuesta
                 byte[] RtaRecibido = new byte[reto.length];
                 in.read(RtaRecibido);
                 
@@ -133,18 +137,15 @@ public class Cliente implements Runnable {
                 MessageDigest sha512 = MessageDigest.getInstance("SHA-512");
                 byte[] digest = sha512.digest(gxyBytes);
 
-                // Dividir el digest en dos mitades: primeros 256 bits (32 bytes) para la llave AES
                 byte[] aesKeyBytes = Arrays.copyOfRange(digest, 0, 32);
                 SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-                // Últimos 256 bits (32 bytes) para la llave HMAC
                 byte[] hmacKeyBytes = Arrays.copyOfRange(digest, 32, 64);
                 SecretKey hmacKey = new SecretKeySpec(hmacKeyBytes, "HmacSHA256");
 
                 byte[] iv = (byte[]) in.readObject();
                 IvParameterSpec ivSpec = new IvParameterSpec(iv);
 
-                // Cifrar el ID del usuario
                 cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
                 cipher.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
 
@@ -152,36 +153,29 @@ public class Cliente implements Runnable {
                 byte[] idBytes = id.getBytes(StandardCharsets.UTF_8);
                 byte[] idCifrado = cipher.doFinal(idBytes);
 
-                // Generar la HMAC del ID del usuario
                 Mac mac = Mac.getInstance("HmacSHA256");
                 mac.init(hmacKey);
                 byte[] hmac = mac.doFinal(idBytes);
 
-                // Cifrar el ID del paquete
                 String idPaquete = String.format("%d", currentPaqueteId);
                 byte[] idPaqueteBytes = idPaquete.getBytes(StandardCharsets.UTF_8);
                 byte[] idPaqueteCifrado = cipher.doFinal(idPaqueteBytes);
 
-                // Generar la HMAC del ID del paquete
                 byte[] hmacPaquete = mac.doFinal(idPaqueteBytes);
 
-                // Enviar los datos cifrados y las HMACs al servidor
                 out.writeObject(idCifrado);
                 out.writeObject(hmac);
                 out.writeObject(idPaqueteCifrado);
                 out.writeObject(hmacPaquete);
                 out.flush();
 
-                // Recibir y verificar la respuesta del servidor
                 byte[] idEstado = (byte[]) in.readObject();
                 byte[] hmacEstado = (byte[]) in.readObject();
 
-                // Descifrar el ID del estado
                 cipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
                 byte[] idEstadoDescifrado = cipher.doFinal(idEstado);
                 String idEstadoDescifradoString = new String(idEstadoDescifrado, StandardCharsets.UTF_8);
 
-                // Verificar la HMAC del estado
                 byte[] hmacCalculado = mac.doFinal(idEstadoDescifrado);
                 if (!Arrays.equals(hmacEstado, hmacCalculado)) {
                     throw new SecurityException("La HMAC del ID del estado no es válida.");
@@ -189,7 +183,6 @@ public class Cliente implements Runnable {
 
                 System.out.println("(Cliente " + uid + "): " + "ID Estado descifrado: " + estadosMap.get(Integer.parseInt(idEstadoDescifradoString)));
 
-                // Enviar confirmación de finalización
                 out.writeObject("TERMINAR");
                 numConsultas--;
 

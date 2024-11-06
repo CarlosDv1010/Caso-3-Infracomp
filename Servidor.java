@@ -12,9 +12,9 @@ import java.util.Scanner;
 
 public class Servidor {
     private static final int PUERTO = 12345;
-    private static final int RSA_KEY_SIZE = 1024; // Tamaño de la llave RSA
+    private static final int RSA_KEY_SIZE = 1024; 
     private static int currentid = 0;
-    private static final int MAX_CONEXIONES = 5; // Número máximo de conexiones permitidas
+    private static int MAX_CONEXIONES = 32; 
     private static final Semaphore semaphore = new Semaphore(MAX_CONEXIONES);
 
 
@@ -37,11 +37,13 @@ public class Servidor {
                 System.out.println("2. Iniciar servidor");
                 System.out.println("3. Salir");
                 int opcion = scanner.nextInt();
-                scanner.nextLine(); // Limpiar el buffer
+                scanner.nextLine(); 
 
                 if (opcion == 1) {
                     generarLlaves();
                 } else if (opcion == 2) {
+                    System.out.print("Introduce el número de delegados (servidores concurrentes): ");
+                    MAX_CONEXIONES = scanner.nextInt();
                     cargarLlaves();
                     iniciarServidor();
                 } else if (opcion==3) {
@@ -79,7 +81,6 @@ public class Servidor {
     }
 
     private static void cargarLlaves() throws Exception {
-        // Cargar las llaves pública y privada desde los archivos
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
         try (FileInputStream fis = new FileInputStream("Clientes/public.key")) {
             byte[] keyBytes = fis.readAllBytes();
@@ -96,13 +97,12 @@ public class Servidor {
             System.out.println("Servidor escuchando en el puerto " + PUERTO);
     
             while (true) {
-                semaphore.acquireUninterruptibly(); // Adquirir un permiso antes de aceptar una conexión
+                semaphore.acquireUninterruptibly(); 
                 try {
                     currentid++;
                     Socket socket = serverSocket.accept();
                     System.out.println("Cliente conectado a nuevo hilo.");
     
-                    // Crear un nuevo hilo para manejar al cliente
                     Thread clientThread = new Thread(() -> {
                         try {
                             new ClientHandler(socket, K_w_minus, currentid, tablaPaquetes).run();
@@ -110,19 +110,19 @@ public class Servidor {
                             try {
                                 socket.close();
                             } catch (IOException e) {
-                                e.printStackTrace(); // Manejar la excepción al cerrar el socket
+                                e.printStackTrace(); 
                             }
-                            semaphore.release(); // Liberar el permiso cuando el cliente se desconecta
+                            semaphore.release(); 
                         }
                     });
                     clientThread.start();
                 } catch (IOException e) {
-                    semaphore.release(); // Liberar el permiso si ocurre una excepción al aceptar la conexión
+                    semaphore.release(); 
                     e.printStackTrace();
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace(); // Manejar la excepción al crear el ServerSocket
+            e.printStackTrace(); 
         }
     }
     
