@@ -138,6 +138,7 @@ class ClientHandler implements Runnable {
                     }
 
                     BigInteger Gy = (BigInteger) in.readObject();
+                    long startCifradoAsimetrico = System.currentTimeMillis();
                     BigInteger Gyx = Gy.modPow(x, P);
 
                     byte[] gxyBytes = Gyx.toByteArray();
@@ -157,6 +158,8 @@ class ClientHandler implements Runnable {
 
                     out.writeObject(iv);
                     out.flush();
+                    long endCifradoAsimetrico = System.currentTimeMillis();
+                    System.out.println("Tiempo para cifrar asimétricamente: " + (endCifradoAsimetrico - startCifradoAsimetrico) + " ms");
 
                     byte[] idCifrado = (byte[]) in.readObject();
                     byte[] hmac = (byte[]) in.readObject();
@@ -192,7 +195,7 @@ class ClientHandler implements Runnable {
                     long endVerif = System.currentTimeMillis();
                     System.out.println("Tiempo para verificar la consulta: " + (endVerif - startVerif) + " ms");
                     System.out.println("(Hilo servidor " + sid + "): " + "Estado del paquete: " + estadoPaquete);
-
+                    long startCifrado = System.currentTimeMillis();
                     Cipher cipher2 = Cipher.getInstance("AES/CBC/PKCS5Padding");
                     cipher2.init(Cipher.ENCRYPT_MODE, aesKey, ivSpec);
 
@@ -202,6 +205,8 @@ class ClientHandler implements Runnable {
 
                     mac.init(hmacKey);
                     byte[] hmacEstado = mac.doFinal(idBytes);
+                    long endCifrado = System.currentTimeMillis();
+                    System.out.println("Tiempo para cifrar el estado: " + (endCifrado - startCifrado) + " ms");
 
                     out.writeObject(idCifradoEstado);
                     out.writeObject(hmacEstado);
